@@ -1,31 +1,15 @@
-import { Suspense } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { obtenerOrdenes } from "@/lib/services/orden-supabase-service"
+import { OrdenesTable } from "@/components/ordenes/ordenes-table"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import Link from "next/link"
-import { OrdenesTable } from "@/components/ordenes/ordenes-table"
-import { Skeleton } from "@/components/ui/skeleton"
-import { obtenerOrdenes } from "@/lib/services/orden-supabase-service"
-
-export const metadata = {
-  title: "Órdenes | Gestor de Órdenes",
-  description: "Gestión de órdenes de compra y venta",
-}
-
-// Componente de carga para la tabla de órdenes
-function OrdenesTableSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-10 w-full" />
-      <Skeleton className="h-96 w-full" />
-    </div>
-  )
-}
 
 export default async function OrdenesPage() {
+  const ordenes = await obtenerOrdenes()
+
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="container mx-auto py-10">
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Órdenes</h1>
         <Link href="/ordenes/nueva">
           <Button>
@@ -34,26 +18,8 @@ export default async function OrdenesPage() {
           </Button>
         </Link>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Todas las Órdenes</CardTitle>
-          <CardDescription>Listado de todas las órdenes de compra y venta registradas en el sistema.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<OrdenesTableSkeleton />}>
-            <OrdenesTableWrapper />
-          </Suspense>
-        </CardContent>
-      </Card>
+      <OrdenesTable ordenes={ordenes} />
     </div>
   )
 }
 
-// Componente wrapper para cargar los datos de las órdenes
-async function OrdenesTableWrapper() {
-  // Obtener las órdenes desde Supabase usando la función del servidor
-  const ordenes = await obtenerOrdenes()
-
-  return <OrdenesTable ordenes={ordenes} />
-}

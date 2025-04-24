@@ -130,3 +130,4 @@ export function AssetSelectionStep({ assets, selectedAssetId, onAssetSelect, onB
     </div>
   )
 }
+

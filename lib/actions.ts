@@ -869,3 +869,4 @@ export async function updateOrder(
 
 // Agregar un log para depuración:
 // Note: Removed console.log statement that was outside of function scope
+

@@ -2,49 +2,15 @@
 
 import { revalidatePath } from "next/cache"
 import { getClientById, getAssetById } from "@/lib/data"
-import type { OrdenInput, OrdenDetalleInput } from "@/lib/types/orden-types"
 import {
   crearOrden,
-  obtenerOrdenes,
-  obtenerOrdenPorId,
-  eliminarOrden,
-  actualizarEstadoOrden as updateOrdenEstado,
+  actualizarEstadoOrden as actualizarEstado,
+  agregarObservacion as agregarObs,
+  eliminarOrden as eliminarOrd,
+  obtenerOrdenes as obtenerOrds,
+  obtenerOrdenPorId as obtenerOrdenPorIdFn,
 } from "@/lib/services/orden-supabase-service"
-import { createServerClient } from "@/lib/supabase/server"
-import type { OrdenObservacionInput } from "@/lib/types/orden-types"
-
-// Agregar una observación a una orden
-export async function agregarObservacionOrden(
-  ordenId: string,
-  texto: string,
-  usuarioId?: string,
-  usuarioNombre?: string,
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const supabase = createServerClient()
-
-    const observacion: OrdenObservacionInput = {
-      orden_id: ordenId,
-      texto,
-      usuario_id: usuarioId,
-      usuario_nombre: usuarioNombre,
-    }
-
-    const { error } = await supabase.from("orden_observaciones").insert(observacion)
-
-    if (error) throw error
-
-    // Revalidar rutas
-    revalidatePath("/")
-    revalidatePath("/ordenes")
-    revalidatePath(`/ordenes/${ordenId}`)
-
-    return { success: true }
-  } catch (error: any) {
-    console.error("Error al agregar observación:", error)
-    return { success: false, error: error.message || "Error al agregar la observación" }
-  }
-}
+import type { OrdenInput, OrdenDetalleInput } from "@/lib/types/orden-types"
 
 // Tipo para los datos del formulario de orden individual
 interface IndividualOrderFormData {
@@ -296,36 +262,49 @@ export async function crearOperacionSwap(data: SwapOrderFormData) {
   }
 }
 
-// Actualizar el estado de una orden
-export async function actualizarEstadoOrdenAction(
-  id: string,
-  estado: string,
-  observacion?: string,
-): Promise<{ success: boolean; error?: string }> {
+// Función para actualizar el estado de una orden
+export async function actualizarEstadoOrden(id: string, estado: string, observacion?: string) {
   try {
-    // Actualizar el estado de la orden usando el servicio de Supabase
-    const resultado = await updateOrdenEstado(id, estado, observacion)
-
-    if (!resultado.success) {
-      return { success: false, error: resultado.error || "Error al actualizar el estado de la orden" }
-    }
+    const resultado = await actualizarEstado(id, estado, observacion)
 
     // Revalidar rutas
     revalidatePath("/")
     revalidatePath("/ordenes")
     revalidatePath(`/ordenes/${id}`)
 
-    return { success: true }
+    return resultado
   } catch (error: any) {
-    console.error(`Error al actualizar estado de orden con ID ${id}:`, error)
+    console.error(`Error al actualizar estado de orden ${id}:`, error)
     return { success: false, error: error.message || "Error al actualizar el estado de la orden" }
   }
 }
 
-// Función para eliminar una orden
-export async function eliminarOrdenAction(id: string) {
+// Función para agregar una observación a una orden
+export async function agregarObservacionOrden(id: string, texto: string, usuarioId?: string, usuarioNombre?: string) {
   try {
-    const resultado = await eliminarOrden(id)
+    const resultado = await agregarObs({
+      orden_id: id,
+      texto,
+      usuario_id: usuarioId,
+      usuario_nombre: usuarioNombre,
+    })
+
+    // Revalidar rutas
+    revalidatePath("/")
+    revalidatePath("/ordenes")
+    revalidatePath(`/ordenes/${id}`)
+
+    return resultado
+  } catch (error: any) {
+    console.error(`Error al agregar observación a orden ${id}:`, error)
+    return { success: false, error: error.message || "Error al agregar la observación" }
+  }
+}
+
+// Función para eliminar una orden
+export async function eliminarOrden(id: string) {
+  try {
+    const resultado = await eliminarOrd(id)
 
     // Revalidar rutas
     revalidatePath("/")
@@ -339,9 +318,9 @@ export async function eliminarOrdenAction(id: string) {
 }
 
 // Función para obtener todas las órdenes
-export async function obtenerOrdenesAction() {
+export async function obtenerOrdenes() {
   try {
-    return await obtenerOrdenes()
+    return await obtenerOrds()
   } catch (error) {
     console.error("Error al obtener órdenes:", error)
     return []
@@ -349,74 +328,12 @@ export async function obtenerOrdenesAction() {
 }
 
 // Función para obtener una orden por ID
-export async function obtenerOrdenPorIdAction(id: string) {
+export async function obtenerOrdenPorId(id: string) {
   try {
-    return await obtenerOrdenPorId(id)
+    return await obtenerOrdenPorIdFn(id)
   } catch (error) {
     console.error(`Error al obtener orden ${id}:`, error)
     return null
   }
 }
 
-// Enviar órdenes al mercado
-export async function enviarOrdenesAlMercado(
-  ordenIds: string[],
-): Promise<{ success: boolean; error?: string; results?: any[] }> {
-  try {
-    const supabase = createServerClient()
-
-    // Simulación de envío al mercado
-    const results = []
-
-    for (const id of ordenIds) {
-      // Actualizar el estado de la orden a "En Proceso"
-      const { error } = await supabase
-        .from("ordenes")
-        .update({
-          estado: "En Proceso",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-
-      if (error) throw error
-
-      // Agregar observación
-      await supabase.from("orden_observaciones").insert({
-        orden_id: id,
-        texto: "Orden enviada al mercado",
-      })
-
-      results.push({ id, status: "sent" })
-    }
-
-    // Revalidar rutas
-    revalidatePath("/")
-    revalidatePath("/ordenes")
-    revalidatePath("/trading")
-
-    return { success: true, results }
-  } catch (error: any) {
-    console.error("Error al enviar órdenes al mercado:", error)
-    return { success: false, error: error.message || "Error al enviar las órdenes al mercado" }
-  }
-}
-
-// Obtener órdenes enviadas al mercado
-export async function obtenerOrdenesEnviadas(): Promise<any[]> {
-  try {
-    const supabase = createServerClient()
-
-    const { data, error } = await supabase
-      .from("ordenes")
-      .select("*")
-      .in("estado", ["En Proceso", "Ejecutada"])
-      .order("updated_at", { ascending: false })
-
-    if (error) throw error
-
-    return data || []
-  } catch (error) {
-    console.error("Error al obtener órdenes enviadas:", error)
-    return []
-  }
-}

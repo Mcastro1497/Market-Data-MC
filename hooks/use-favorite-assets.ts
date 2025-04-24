@@ -45,3 +45,4 @@ export function useFavoriteAssets() {
 
   return { favorites, toggleFavorite, isFavorite }
 }
+

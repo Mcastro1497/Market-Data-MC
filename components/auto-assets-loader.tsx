@@ -58,3 +58,4 @@ export function AutoAssetsLoader() {
   // Este componente no renderiza nada visible
   return null
 }
+

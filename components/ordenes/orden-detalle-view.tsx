@@ -1,37 +1,121 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import type { Orden, OrdenDetalle, OrdenObservacion } from "@/lib/types/orden-types"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatDate, formatCurrency } from "@/lib/utils"
-import { Clock, CheckCircle, XCircle, AlertCircle, FileText, MessageSquare, History } from "lucide-react"
-import type { Orden } from "@/lib/types/orden-types"
+import { Textarea } from "@/components/ui/textarea"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import { ArrowLeft, MessageSquare, Clock, AlertCircle, CheckCircle2, XCircle } from "lucide-react"
+import Link from "next/link"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/components/ui/use-toast"
+import { OrdenService } from "@/lib/services/orden-supabase-service-client"
 
 interface OrdenDetalleViewProps {
   orden: Orden
 }
 
 export function OrdenDetalleView({ orden }: OrdenDetalleViewProps) {
-  const [activeTab, setActiveTab] = useState("detalles")
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [newStatus, setNewStatus] = useState("")
+  const [statusNote, setStatusNote] = useState("")
+  const [newObservation, setNewObservation] = useState("")
+  const [isAddingObservation, setIsAddingObservation] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const router = useRouter()
+  const { toast } = useToast()
 
-  // Obtener el icono según el estado
-  const getStatusIcon = (estado: string) => {
-    switch (estado.toLowerCase()) {
-      case "pendiente":
-        return <Clock className="h-4 w-4 mr-1" />
-      case "tomada":
-      case "en proceso":
-        return <AlertCircle className="h-4 w-4 mr-1" />
-      case "ejecutada":
-      case "completada":
-        return <CheckCircle className="h-4 w-4 mr-1" />
-      case "cancelada":
-      case "rechazada":
-        return <XCircle className="h-4 w-4 mr-1" />
-      default:
-        return <Clock className="h-4 w-4 mr-1" />
+  // Formatear fechas
+  const createdAt = new Date(orden.created_at)
+  const updatedAt = new Date(orden.updated_at)
+
+  // Manejar cambio de estado
+  const handleStatusChange = async () => {
+    if (!newStatus) return
+
+    setIsUpdatingStatus(true)
+    try {
+      const result = await OrdenService.actualizarEstadoOrden(orden.id, newStatus, statusNote)
+
+      if (result.success) {
+        toast({
+          title: "Estado actualizado",
+          description: `La orden ha sido actualizada a "${newStatus}"`,
+        })
+        setIsDialogOpen(false)
+        setNewStatus("")
+        setStatusNote("")
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo actualizar el estado",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error al actualizar estado:", error)
+      toast({
+        title: "Error",
+        description: "Ha ocurrido un error al actualizar el estado",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  // Manejar agregar observación
+  const handleAddObservation = async () => {
+    if (!newObservation.trim()) return
+
+    setIsAddingObservation(true)
+    try {
+      const result = await OrdenService.agregarObservacion({
+        orden_id: orden.id,
+        texto: newObservation,
+        usuario_id: "user-1", // En un entorno real, esto vendría del usuario autenticado
+        usuario_nombre: "Usuario Actual", // En un entorno real, esto vendría del usuario autenticado
+      })
+
+      if (result.success) {
+        toast({
+          title: "Observación agregada",
+          description: "La observación ha sido agregada correctamente",
+        })
+        setNewObservation("")
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo agregar la observación",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error al agregar observación:", error)
+      toast({
+        title: "Error",
+        description: "Ha ocurrido un error al agregar la observación",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAddingObservation(false)
     }
   }
 
@@ -54,156 +138,257 @@ export function OrdenDetalleView({ orden }: OrdenDetalleViewProps) {
     }
   }
 
+  // Obtener el icono según el estado
+  const getStatusIcon = (estado: string) => {
+    switch (estado.toLowerCase()) {
+      case "pendiente":
+        return <Clock className="h-4 w-4 mr-1" />
+      case "tomada":
+      case "en proceso":
+        return <AlertCircle className="h-4 w-4 mr-1" />
+      case "ejecutada":
+      case "completada":
+        return <CheckCircle2 className="h-4 w-4 mr-1" />
+      case "cancelada":
+      case "rechazada":
+        return <XCircle className="h-4 w-4 mr-1" />
+      default:
+        return <Clock className="h-4 w-4 mr-1" />
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="text-2xl">Orden #{orden.id.substring(0, 8)}</CardTitle>
-              <CardDescription>Creada el {formatDate(orden.created_at)}</CardDescription>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Link href="/ordenes">
+            <Button variant="outline" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-bold">Detalles de la Orden</h1>
+        </div>
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>Cambiar Estado</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cambiar Estado de la Orden</DialogTitle>
+              <DialogDescription>Selecciona el nuevo estado para esta orden.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label htmlFor="status">Nuevo Estado</label>
+                <Select onValueChange={setNewStatus} value={newStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="tomada">Tomada</SelectItem>
+                    <SelectItem value="en proceso">En Proceso</SelectItem>
+                    <SelectItem value="ejecutada">Ejecutada</SelectItem>
+                    <SelectItem value="completada">Completada</SelectItem>
+                    <SelectItem value="cancelada">Cancelada</SelectItem>
+                    <SelectItem value="rechazada">Rechazada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <label htmlFor="note">Observación (opcional)</label>
+                <Textarea
+                  id="note"
+                  placeholder="Añade una observación sobre el cambio de estado"
+                  value={statusNote}
+                  onChange={(e) => setStatusNote(e.target.value)}
+                />
+              </div>
             </div>
-            <Badge variant={getStatusBadgeVariant(orden.estado)} className="flex items-center">
-              {getStatusIcon(orden.estado)}
-              {orden.estado}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="detalles" className="flex items-center">
-                <FileText className="h-4 w-4 mr-2" />
-                Detalles
-              </TabsTrigger>
-              <TabsTrigger value="observaciones" className="flex items-center">
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Observaciones
-              </TabsTrigger>
-              <TabsTrigger value="historial" className="flex items-center">
-                <History className="h-4 w-4 mr-2" />
-                Historial
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="detalles" className="space-y-4 pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleStatusChange} disabled={!newStatus || isUpdatingStatus}>
+                {isUpdatingStatus ? "Actualizando..." : "Guardar Cambios"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Información de la Orden</CardTitle>
+            <CardDescription>Detalles generales de la orden</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Cliente</h3>
-                  <p className="text-base font-medium">{orden.cliente_nombre}</p>
-                  {orden.cliente_cuenta && (
-                    <p className="text-sm text-muted-foreground">Cuenta: {orden.cliente_cuenta}</p>
-                  )}
+                  <p className="text-sm font-medium text-muted-foreground">ID de la Orden</p>
+                  <p className="font-mono">{orden.id}</p>
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Tipo de operación</h3>
-                  <p className="text-base font-medium">{orden.tipo_operacion}</p>
-                </div>
+                <Badge variant={getStatusBadgeVariant(orden.estado)} className="flex items-center">
+                  {getStatusIcon(orden.estado)}
+                  {orden.estado}
+                </Badge>
               </div>
 
+              <Separator />
+
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Detalles de la operación</h3>
-                {orden.detalles && orden.detalles.length > 0 ? (
-                  <div className="border rounded-md">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Ticker
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Cantidad
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Precio
-                          </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Total
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {orden.detalles.map((detalle, index) => (
-                          <tr key={index}>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{detalle.ticker}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm">{detalle.cantidad}</td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm">
-                              {detalle.precio ? formatCurrency(detalle.precio) : "Mercado"}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap text-sm">
-                              {detalle.precio ? formatCurrency(detalle.precio * detalle.cantidad) : "A determinar"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No hay detalles disponibles</p>
+                <p className="text-sm font-medium text-muted-foreground">Cliente</p>
+                <p className="font-medium">{orden.cliente_nombre}</p>
+                {orden.cliente_cuenta && (
+                  <p className="text-sm text-muted-foreground">Cuenta: {orden.cliente_cuenta}</p>
                 )}
               </div>
 
-              {orden.instrucciones && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Instrucciones</h3>
-                  <p className="text-sm mt-1 p-2 bg-gray-50 rounded-md">{orden.instrucciones}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Tipo de Operación</p>
+                  <Badge variant={orden.tipo_operacion === "Compra" ? "default" : "destructive"}>
+                    {orden.tipo_operacion}
+                  </Badge>
                 </div>
+
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Mercado</p>
+                  <p>{orden.mercado || "No especificado"}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Fecha de Creación</p>
+                  <p>{format(createdAt, "dd/MM/yyyy HH:mm", { locale: es })}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Última Actualización</p>
+                  <p>{format(updatedAt, "dd/MM/yyyy HH:mm", { locale: es })}</p>
+                </div>
+              </div>
+
+              {orden.notas && (
+                <>
+                  <Separator />
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Notas</p>
+                    <p className="whitespace-pre-line">{orden.notas}</p>
+                  </div>
+                </>
               )}
-            </TabsContent>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Detalles del Activo</CardTitle>
+            <CardDescription>Información sobre el activo</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {orden.detalles && orden.detalles.length > 0 ? (
+              <div className="space-y-4">
+                {orden.detalles.map((detalle: OrdenDetalle) => (
+                  <div key={detalle.id} className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Ticker</p>
+                      <p className="font-medium">{detalle.ticker}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Cantidad</p>
+                      <p>{detalle.cantidad.toLocaleString()}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Precio</p>
+                      <p>
+                        {detalle.es_orden_mercado
+                          ? "Orden a mercado"
+                          : `$${detalle.precio.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      </p>
+                    </div>
+
+                    {!detalle.es_orden_mercado && (
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">Importe Total</p>
+                        <p className="font-medium">
+                          $
+                          {(detalle.cantidad * detalle.precio).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">No hay detalles disponibles</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Observaciones</CardTitle>
+          <CardDescription>Historial de observaciones y comentarios</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="observaciones">
+            <TabsList>
+              <TabsTrigger value="observaciones">Observaciones</TabsTrigger>
+              <TabsTrigger value="nueva">Nueva Observación</TabsTrigger>
+            </TabsList>
             <TabsContent value="observaciones" className="pt-4">
               {orden.observaciones && orden.observaciones.length > 0 ? (
                 <div className="space-y-4">
-                  {orden.observaciones.map((obs, index) => (
-                    <div key={index} className="border p-3 rounded-md">
-                      <div className="flex justify-between items-start">
-                        <p className="font-medium">{obs.usuario || "Sistema"}</p>
-                        <span className="text-xs text-muted-foreground">{formatDate(obs.fecha)}</span>
+                  {orden.observaciones.map((obs: OrdenObservacion) => (
+                    <div key={obs.id} className="rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                          <p className="font-medium">{obs.usuario_nombre || "Usuario"}</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(obs.created_at), "dd/MM/yyyy HH:mm", { locale: es })}
+                        </p>
                       </div>
-                      <p className="mt-1 text-sm">{obs.texto}</p>
+                      <p className="mt-2 whitespace-pre-line">{obs.texto}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground">No hay observaciones registradas.</p>
+                <p className="text-muted-foreground">No hay observaciones registradas</p>
               )}
             </TabsContent>
-            <TabsContent value="historial" className="pt-4">
-              {orden.historial && orden.historial.length > 0 ? (
-                <div className="relative border-l-2 pl-4 ml-2 space-y-6">
-                  {orden.historial.map((evento, index) => (
-                    <div key={index} className="relative">
-                      <div className="absolute -left-[1.65rem] bg-background border-2 rounded-full w-4 h-4"></div>
-                      <div className="flex flex-col">
-                        <span className="text-xs text-muted-foreground">{formatDate(evento.fecha)}</span>
-                        <span className="font-medium">{evento.estado}</span>
-                        {evento.usuario && <span className="text-sm">Por: {evento.usuario}</span>}
-                        {evento.comentario && <span className="text-sm mt-1">{evento.comentario}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No hay historial disponible.</p>
-              )}
+            <TabsContent value="nueva" className="pt-4">
+              <div className="space-y-4">
+                <Textarea
+                  placeholder="Escribe una nueva observación..."
+                  value={newObservation}
+                  onChange={(e) => setNewObservation(e.target.value)}
+                  className="min-h-[100px]"
+                />
+                <Button onClick={handleAddObservation} disabled={!newObservation.trim() || isAddingObservation}>
+                  {isAddingObservation ? "Agregando..." : "Agregar Observación"}
+                </Button>
+              </div>
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
-
-      <div className="flex justify-end space-x-2">
-        <Button variant="outline">Volver</Button>
-        {orden.estado.toLowerCase() === "pendiente" && (
-          <>
-            <Button variant="secondary">Tomar orden</Button>
-            <Button variant="destructive">Rechazar</Button>
-          </>
-        )}
-        {orden.estado.toLowerCase() === "tomada" && (
-          <>
-            <Button>Ejecutar</Button>
-            <Button variant="destructive">Cancelar</Button>
-          </>
-        )}
-      </div>
     </div>
   )
 }
+

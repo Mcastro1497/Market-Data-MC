@@ -24,3 +24,4 @@ export const initDB = async () => {
     throw error
   }
 }
+

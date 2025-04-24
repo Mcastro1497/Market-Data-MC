@@ -79,3 +79,4 @@ export async function deleteCliente(id: string) {
   revalidatePath("/clientes")
   return { success: true }
 }
+

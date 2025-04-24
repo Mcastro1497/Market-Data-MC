@@ -1,17 +1,16 @@
 "use server"
 
-import { createServiceClient } from "@/lib/supabase/server"
+import { createServerClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import type { Orden, OrdenInput, OrdenDetalleInput, OrdenObservacionInput } from "@/lib/types/orden-types"
+import type { OrdenInput, OrdenDetalleInput, OrdenObservacionInput, Orden } from "@/lib/types/orden-types"
 
-// Crear una nueva orden (Spanish version)
+// Crear una nueva orden
 export async function crearOrden(
   orden: OrdenInput,
   detalles: OrdenDetalleInput[],
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    // Usar el cliente de servicio para operaciones administrativas
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     // Insertar la orden
     const { data: ordenData, error: ordenError } = await supabase.from("ordenes").insert(orden).select("id").single()
@@ -41,18 +40,10 @@ export async function crearOrden(
   }
 }
 
-// English version for backward compatibility
-export async function createOrden(
-  orden: OrdenInput,
-  detalles: OrdenDetalleInput[],
-): Promise<{ success: boolean; id?: string; error?: string }> {
-  return crearOrden(orden, detalles)
-}
-
 // Obtener todas las órdenes
 export async function obtenerOrdenes(): Promise<Orden[]> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     const { data, error } = await supabase.from("ordenes").select("*").order("created_at", { ascending: false })
 
@@ -68,7 +59,7 @@ export async function obtenerOrdenes(): Promise<Orden[]> {
 // Obtener una orden por ID con sus detalles y observaciones
 export async function obtenerOrdenPorId(id: string): Promise<Orden | null> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     // Obtener la orden
     const { data: orden, error: ordenError } = await supabase.from("ordenes").select("*").eq("id", id).single()
@@ -109,7 +100,7 @@ export async function actualizarOrden(
   datos: Partial<OrdenInput>,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     const { error } = await supabase
       .from("ordenes")
@@ -133,7 +124,7 @@ export async function actualizarOrden(
 // Eliminar una orden
 export async function eliminarOrden(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     // Eliminar la orden (las restricciones de clave foránea eliminarán automáticamente los detalles y observaciones)
     const { error } = await supabase.from("ordenes").delete().eq("id", id)
@@ -151,17 +142,12 @@ export async function eliminarOrden(id: string): Promise<{ success: boolean; err
   }
 }
 
-// English version for backward compatibility
-export async function deleteOrden(id: string): Promise<{ success: boolean; error?: string }> {
-  return eliminarOrden(id)
-}
-
 // Agregar una observación a una orden
 export async function agregarObservacion(
   observacion: OrdenObservacionInput,
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     const { data, error } = await supabase.from("orden_observaciones").insert(observacion).select("id").single()
 
@@ -186,7 +172,7 @@ export async function actualizarEstadoOrden(
   observacion?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     // Actualizar el estado de la orden
     const { error: ordenError } = await supabase
@@ -221,19 +207,10 @@ export async function actualizarEstadoOrden(
   }
 }
 
-// English version for backward compatibility
-export async function updateOrdenEstado(
-  id: string,
-  estado: string,
-  observacion?: string,
-): Promise<{ success: boolean; error?: string }> {
-  return actualizarEstadoOrden(id, estado, observacion)
-}
-
 // Obtener órdenes por cliente
 export async function obtenerOrdenesPorCliente(clienteId: string): Promise<Orden[]> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     const { data, error } = await supabase
       .from("ordenes")
@@ -253,7 +230,7 @@ export async function obtenerOrdenesPorCliente(clienteId: string): Promise<Orden
 // Obtener órdenes por estado
 export async function obtenerOrdenesPorEstado(estado: string): Promise<Orden[]> {
   try {
-    const supabase = createServiceClient()
+    const supabase = createServerClient()
 
     const { data, error } = await supabase
       .from("ordenes")
@@ -269,3 +246,19 @@ export async function obtenerOrdenesPorEstado(estado: string): Promise<Orden[]> 
     return []
   }
 }
+
+// Nueva exportación para mantener compatibilidad: una función asíncrona que retorna todos los métodos.
+export async function OrdenService() {
+  return {
+    crearOrden,
+    obtenerOrdenes,
+    obtenerOrdenPorId,
+    actualizarOrden,
+    eliminarOrden,
+    agregarObservacion,
+    actualizarEstadoOrden,
+    obtenerOrdenesPorCliente,
+    obtenerOrdenesPorEstado,
+  }
+}
+

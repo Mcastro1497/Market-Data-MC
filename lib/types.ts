@@ -140,3 +140,4 @@ export enum OrderStatus {
   CANCELLED = "Cancelada",
   REVIEW = "Revisar",
 }
+

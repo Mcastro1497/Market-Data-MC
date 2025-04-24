@@ -621,3 +621,4 @@ export async function getAssets(): Promise<Asset[]> {
   // Si no hay datos, devolver un array vacío
   return []
 }
+

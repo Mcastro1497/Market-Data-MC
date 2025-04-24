@@ -1,12 +1,18 @@
 "use client"
 
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 import type { Database } from "./database.types"
 
-// Crear un cliente de Supabase para el navegador
-export const createClient = () => {
-  return createSupabaseClient<Database>(
+let supabaseClient: ReturnType<typeof createBrowserClient<Database>> | null = null
+
+export function createClient() {
+  if (supabaseClient) return supabaseClient
+
+  supabaseClient = createBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+
+  return supabaseClient
 }
+

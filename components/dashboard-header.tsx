@@ -16,3 +16,4 @@ export function DashboardHeader({ heading, text, children }: DashboardHeaderProp
     </div>
   )
 }
+

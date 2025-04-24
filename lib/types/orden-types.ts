@@ -60,3 +60,4 @@ export interface OrdenObservacion {
   texto: string
   created_at: string
 }
+

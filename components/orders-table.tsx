@@ -675,3 +675,4 @@ export function OrdersTable({ orders }: { orders: Order[] }) {
     </div>
   )
 }
+

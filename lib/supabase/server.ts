@@ -1,16 +1,35 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import type { Database } from "@/lib/supabase/database.types"
+import { createServerClient as createSupaServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+import type { Database } from "./database.types"
 
-// Función para crear un cliente de Supabase para el servidor
-// Esta función NO usa next/headers para evitar problemas en pages/
-export const createServerClient = () => {
-  return createSupabaseClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+export function createServerClient() {
+  const cookieStore = cookies()
+
+  return createSupaServerClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        try {
+          cookieStore.set({ name, value, ...options })
+        } catch (error) {
+          // Cookies can only be set in a Server Action or Route Handler
+          console.error("Error setting cookie:", error)
+        }
+      },
+      remove(name: string, options: any) {
+        try {
+          cookieStore.set({ name, value: "", ...options })
+        } catch (error) {
+          // Cookies can only be deleted in a Server Action or Route Handler
+          console.error("Error removing cookie:", error)
+        }
+      },
+    },
+  })
 }
 
-// Cliente de servicio para operaciones administrativas
-export const createServiceClient = () => {
-  return createSupabaseClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
-
-// Alias para mantener compatibilidad con el nombre requerido
+// Añadimos esta exportación para mantener compatibilidad con el código existente
 export const createClient = createServerClient
+

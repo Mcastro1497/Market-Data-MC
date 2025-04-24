@@ -167,3 +167,4 @@ export function ClientsSupabaseSync() {
     </Card>
   )
 }
+

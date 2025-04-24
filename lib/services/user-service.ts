@@ -185,3 +185,4 @@ export function hasPermission(user: User, permission: Permission): boolean {
   const role = roles.find((r) => r.name === user.role)
   return role ? role.permissions.includes(permission) : false
 }
+

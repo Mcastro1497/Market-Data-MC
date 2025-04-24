@@ -164,3 +164,4 @@ export function MultiClientSelect({ clients, selectedClientIds, onChange }: Mult
     </div>
   )
 }
+

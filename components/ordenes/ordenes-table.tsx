@@ -1,162 +1,294 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  type SortingState,
+  type VisibilityState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
+import { ArrowUpDown, ChevronDown, MoreHorizontal } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Eye, MoreHorizontal, CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react"
-import { formatDate } from "@/lib/utils"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import Link from "next/link"
 import type { Orden } from "@/lib/types/orden-types"
+
+// Definición de las columnas de la tabla
+export const columns: ColumnDef<Orden>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Seleccionar todo"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Seleccionar fila"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
+  {
+    accessorKey: "id",
+    header: "ID",
+    cell: ({ row }) => <div className="font-mono text-xs">{row.getValue("id")}</div>,
+  },
+  {
+    accessorKey: "cliente_nombre",
+    header: ({ column }) => {
+      return (
+        <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+          Cliente
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      )
+    },
+    cell: ({ row }) => {
+      const clienteNombre = row.getValue("cliente_nombre") as string
+      const clienteCuenta = row.original.cliente_cuenta || ""
+
+      return (
+        <div>
+          <div className="font-medium">{clienteNombre}</div>
+          {clienteCuenta && <div className="text-xs text-muted-foreground">Cuenta: {clienteCuenta}</div>}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: "tipo_operacion",
+    header: "Tipo",
+    cell: ({ row }) => {
+      const tipo = row.getValue("tipo_operacion") as string
+      return <Badge variant={tipo === "Compra" ? "default" : "destructive"}>{tipo}</Badge>
+    },
+  },
+  {
+    accessorKey: "estado",
+    header: "Estado",
+    cell: ({ row }) => {
+      const estado = row.getValue("estado") as string
+
+      // Determinar el estilo del badge según el estado
+      let variant: "default" | "secondary" | "destructive" | "outline" = "outline"
+
+      switch (estado.toLowerCase()) {
+        case "pendiente":
+          variant = "outline"
+          break
+        case "tomada":
+        case "en proceso":
+          variant = "secondary"
+          break
+        case "ejecutada":
+        case "completada":
+          variant = "default"
+          break
+        case "cancelada":
+        case "rechazada":
+          variant = "destructive"
+          break
+      }
+
+      return <Badge variant={variant}>{estado}</Badge>
+    },
+  },
+  {
+    accessorKey: "created_at",
+    header: ({ column }) => {
+      return (
+        <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>
+          Fecha
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      )
+    },
+    cell: ({ row }) => {
+      const fecha = new Date(row.getValue("created_at"))
+
+      // Formatear la fecha
+      const fechaFormateada = format(fecha, "dd/MM/yyyy HH:mm", { locale: es })
+
+      return <div className="text-sm">{fechaFormateada}</div>
+    },
+  },
+  {
+    id: "acciones",
+    cell: ({ row }) => {
+      const orden = row.original
+
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <span className="sr-only">Abrir menú</span>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href={`/ordenes/${orden.id}`}>Ver detalles</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>Editar</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive">Eliminar</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+    },
+  },
+]
 
 interface OrdenesTableProps {
   ordenes: Orden[]
 }
 
 export function OrdenesTable({ ordenes }: OrdenesTableProps) {
-  const [filteredOrdenes, setFilteredOrdenes] = useState(ordenes)
-  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [sorting, setSorting] = useState<SortingState>([])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [rowSelection, setRowSelection] = useState({})
 
-  // Filtrar órdenes por estado
-  const filterByStatus = (status: string | null) => {
-    setStatusFilter(status)
-    if (status === null) {
-      setFilteredOrdenes(ordenes)
-    } else {
-      setFilteredOrdenes(ordenes.filter((orden) => orden.estado.toLowerCase() === status.toLowerCase()))
-    }
-  }
-
-  // Obtener el icono según el estado
-  const getStatusIcon = (estado: string) => {
-    switch (estado.toLowerCase()) {
-      case "pendiente":
-        return <Clock className="h-4 w-4 mr-1" />
-      case "tomada":
-      case "en proceso":
-        return <AlertCircle className="h-4 w-4 mr-1" />
-      case "ejecutada":
-      case "completada":
-        return <CheckCircle className="h-4 w-4 mr-1" />
-      case "cancelada":
-      case "rechazada":
-        return <XCircle className="h-4 w-4 mr-1" />
-      default:
-        return <Clock className="h-4 w-4 mr-1" />
-    }
-  }
-
-  // Determinar el color del badge según el estado
-  const getStatusBadgeVariant = (estado: string) => {
-    switch (estado.toLowerCase()) {
-      case "pendiente":
-        return "outline"
-      case "tomada":
-      case "en proceso":
-        return "secondary"
-      case "ejecutada":
-      case "completada":
-        return "default"
-      case "cancelada":
-      case "rechazada":
-        return "destructive"
-      default:
-        return "outline"
-    }
-  }
+  const table = useReactTable({
+    data: ordenes,
+    columns,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+      rowSelection,
+    },
+  })
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button variant={statusFilter === null ? "default" : "outline"} size="sm" onClick={() => filterByStatus(null)}>
-          Todas
-        </Button>
-        <Button
-          variant={statusFilter === "pendiente" ? "default" : "outline"}
-          size="sm"
-          onClick={() => filterByStatus("pendiente")}
-        >
-          Pendientes
-        </Button>
-        <Button
-          variant={statusFilter === "ejecutada" ? "default" : "outline"}
-          size="sm"
-          onClick={() => filterByStatus("ejecutada")}
-        >
-          Ejecutadas
-        </Button>
-        <Button
-          variant={statusFilter === "cancelada" ? "default" : "outline"}
-          size="sm"
-          onClick={() => filterByStatus("cancelada")}
-        >
-          Canceladas
-        </Button>
+    <div className="w-full">
+      <div className="flex items-center py-4">
+        <Input
+          placeholder="Filtrar por cliente..."
+          value={(table.getColumn("cliente_nombre")?.getFilterValue() as string) ?? ""}
+          onChange={(event) => table.getColumn("cliente_nombre")?.setFilterValue(event.target.value)}
+          className="max-w-sm"
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="ml-auto">
+              Columnas <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {table
+              .getAllColumns()
+              .filter((column) => column.getCanHide())
+              .map((column) => {
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={column.id}
+                    className="capitalize"
+                    checked={column.getIsVisible()}
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                  >
+                    {column.id === "cliente_nombre"
+                      ? "Cliente"
+                      : column.id === "tipo_operacion"
+                        ? "Tipo"
+                        : column.id === "created_at"
+                          ? "Fecha"
+                          : column.id}
+                  </DropdownMenuCheckboxItem>
+                )
+              })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Activo</TableHead>
-              <TableHead>Fecha</TableHead>
-              <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => {
+                  return (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  )
+                })}
+              </TableRow>
+            ))}
           </TableHeader>
           <TableBody>
-            {filteredOrdenes.length > 0 ? (
-              filteredOrdenes.map((orden) => (
-                <TableRow key={orden.id}>
-                  <TableCell className="font-medium">{orden.id.substring(0, 8)}...</TableCell>
-                  <TableCell>{orden.cliente_nombre}</TableCell>
-                  <TableCell>{orden.tipo_operacion}</TableCell>
-                  <TableCell>
-                    {orden.detalles && orden.detalles.length > 0
-                      ? orden.detalles.map((d) => d.ticker).join(", ")
-                      : "N/A"}
-                  </TableCell>
-                  <TableCell>{formatDate(orden.created_at)}</TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(orden.estado)} className="flex items-center w-fit">
-                      {getStatusIcon(orden.estado)}
-                      {orden.estado}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Abrir menú</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/ordenes/${orden.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                  ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-4">
-                  No hay órdenes que coincidan con los filtros seleccionados.
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No hay órdenes registradas.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+      <div className="flex items-center justify-end space-x-2 py-4">
+        <div className="flex-1 text-sm text-muted-foreground">
+          {table.getFilteredSelectedRowModel().rows.length} de {table.getFilteredRowModel().rows.length} fila(s)
+          seleccionada(s).
+        </div>
+        <div className="space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            Anterior
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+            Siguiente
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
+

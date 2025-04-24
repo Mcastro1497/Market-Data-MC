@@ -67,3 +67,4 @@ if (typeof window !== "undefined") {
 
   console.log("Debug utilities available at window.debugGestorOrdenes")
 }
+

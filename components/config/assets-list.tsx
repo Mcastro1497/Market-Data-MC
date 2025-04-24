@@ -161,3 +161,4 @@ export function AssetsList() {
     </Card>
   )
 }
+

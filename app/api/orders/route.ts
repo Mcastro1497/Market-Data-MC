@@ -7,3 +7,4 @@ export async function POST(request: Request) {
   // Agregar un log para depuración:
   console.log("Tipo de operación en API antes de guardar:", data.type)
 }
+

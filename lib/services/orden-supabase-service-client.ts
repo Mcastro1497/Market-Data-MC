@@ -1,38 +1,131 @@
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
-import type { Orden, OrdenInput, OrdenDetalleInput, OrdenObservacionInput } from "@/lib/types/orden-types"
 
-// Definir el OrdenService para uso en el cliente
+// Tipos para las órdenes
+export interface OrdenInput {
+  cliente_id: string
+  cliente_nombre: string
+  cliente_cuenta: string
+  tipo_operacion: string
+  estado: string
+  mercado?: string
+  plazo?: string
+  notas?: string
+}
+
+export interface OrdenDetalleInput {
+  orden_id: string
+  ticker: string
+  cantidad: number
+  precio: number
+  es_orden_mercado: boolean
+}
+
+export interface OrdenObservacionInput {
+  orden_id: string
+  texto: string
+  usuario_id?: string
+  usuario_nombre?: string
+}
+
+export interface Orden {
+  id: string
+  cliente_id: string
+  cliente_nombre: string
+  cliente_cuenta: string
+  tipo_operacion: string
+  estado: string
+  mercado?: string
+  plazo?: string
+  notas?: string
+  created_at: string
+  updated_at: string
+  detalles?: OrdenDetalle[]
+  observaciones?: OrdenObservacion[]
+}
+
+export interface OrdenDetalle {
+  id: string
+  orden_id: string
+  ticker: string
+  cantidad: number
+  precio: number
+  es_orden_mercado: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface OrdenObservacion {
+  id: string
+  orden_id: string
+  texto: string
+  usuario_id?: string
+  usuario_nombre?: string
+  created_at: string
+}
+
+// Crear una nueva orden (versión cliente)
+export async function crearOrden(
+  orden: OrdenInput,
+  detalles: OrdenDetalleInput[],
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const supabase = createClient()
+
+    // Insertar la orden
+    const { data: ordenData, error: ordenError } = await supabase.from("ordenes").insert(orden).select("id").single()
+
+    if (ordenError) throw ordenError
+
+    const ordenId = ordenData.id
+
+    // Insertar los detalles de la orden
+    const detallesConOrdenId = detalles.map((detalle) => ({
+      ...detalle,
+      orden_id: ordenId,
+    }))
+
+    const { error: detallesError } = await supabase.from("orden_detalles").insert(detallesConOrdenId)
+
+    if (detallesError) throw detallesError
+
+    return { success: true, id: ordenId }
+  } catch (error: any) {
+    console.error("Error al crear orden:", error)
+    return { success: false, error: error.message || "Error al crear la orden" }
+  }
+}
+
+// Servicio para interactuar con las tablas de órdenes en Supabase (versión cliente)
 export const OrdenService = {
   // Obtener todas las órdenes
-  obtenerOrdenes: async (): Promise<Orden[]> => {
+  async obtenerOrdenes(): Promise<Orden[]> {
     try {
       const supabase = createClient()
+
       const { data, error } = await supabase.from("ordenes").select("*").order("created_at", { ascending: false })
 
       if (error) throw error
+
       return data || []
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error al obtener órdenes:", error)
       return []
     }
   },
 
-  // Obtener una orden por ID
-  obtenerOrdenPorId: async (id: string): Promise<Orden | null> => {
+  // Obtener una orden por ID con sus detalles y observaciones
+  async obtenerOrdenPorId(id: string): Promise<Orden | null> {
     try {
       const supabase = createClient()
 
       // Obtener la orden
       const { data: orden, error: ordenError } = await supabase.from("ordenes").select("*").eq("id", id).single()
 
-      if (ordenError) {
-        if (ordenError.code === "PGRST116") return null // No encontrado
-        throw ordenError
-      }
+      if (ordenError) throw ordenError
 
-      // Obtener los detalles
+      // Obtener los detalles de la orden
       const { data: detalles, error: detallesError } = await supabase
         .from("orden_detalles")
         .select("*")
@@ -40,7 +133,7 @@ export const OrdenService = {
 
       if (detallesError) throw detallesError
 
-      // Obtener las observaciones
+      // Obtener las observaciones de la orden
       const { data: observaciones, error: observacionesError } = await supabase
         .from("orden_observaciones")
         .select("*")
@@ -54,97 +147,17 @@ export const OrdenService = {
         detalles: detalles || [],
         observaciones: observaciones || [],
       }
-    } catch (error: any) {
-      console.error(`Error al obtener orden ${id}:`, error)
+    } catch (error) {
+      console.error(`Error al obtener orden con ID ${id}:`, error)
       return null
     }
   },
 
-  // Estas son funciones proxy que llamarán a las funciones del servidor
-  crearOrden: async (orden: OrdenInput, detalles: OrdenDetalleInput[]) => {
-    const response = await fetch("/api/ordenes", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ orden, detalles }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(error)
-    }
-
-    return await response.json()
-  },
-
-  actualizarOrden: async (id: string, datos: Partial<OrdenInput>) => {
-    const response = await fetch(`/api/ordenes/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(datos),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(error)
-    }
-
-    return await response.json()
-  },
-
-  eliminarOrden: async (id: string) => {
-    const response = await fetch(`/api/ordenes/${id}`, {
-      method: "DELETE",
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(error)
-    }
-
-    return await response.json()
-  },
-
-  agregarObservacion: async (observacion: OrdenObservacionInput) => {
-    const response = await fetch(`/api/ordenes/${observacion.orden_id}/observaciones`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(observacion),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(error)
-    }
-
-    return await response.json()
-  },
-
-  actualizarEstadoOrden: async (id: string, estado: string, observacion?: string) => {
-    const response = await fetch(`/api/ordenes/${id}/estado`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ estado, observacion }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(error)
-    }
-
-    return await response.json()
-  },
-
-  obtenerOrdenesPorCliente: async (clienteId: string) => {
+  // Obtener órdenes por cliente
+  async obtenerOrdenesPorCliente(clienteId: string): Promise<Orden[]> {
     try {
       const supabase = createClient()
+
       const { data, error } = await supabase
         .from("ordenes")
         .select("*")
@@ -152,16 +165,19 @@ export const OrdenService = {
         .order("created_at", { ascending: false })
 
       if (error) throw error
+
       return data || []
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Error al obtener órdenes del cliente ${clienteId}:`, error)
       return []
     }
   },
 
-  obtenerOrdenesPorEstado: async (estado: string) => {
+  // Obtener órdenes por estado
+  async obtenerOrdenesPorEstado(estado: string): Promise<Orden[]> {
     try {
       const supabase = createClient()
+
       const { data, error } = await supabase
         .from("ordenes")
         .select("*")
@@ -169,26 +185,131 @@ export const OrdenService = {
         .order("created_at", { ascending: false })
 
       if (error) throw error
+
       return data || []
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Error al obtener órdenes con estado ${estado}:`, error)
       return []
     }
   },
 
-  // Versiones en inglés
-  createOrden: async (orden: OrdenInput, detalles: OrdenDetalleInput[]) => {
-    return OrdenService.crearOrden(orden, detalles)
+  // Actualizar el estado de una orden
+  async actualizarEstadoOrden(
+    id: string,
+    estado: string,
+    observacion?: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const supabase = createClient()
+
+      // Actualizar el estado de la orden
+      const { error: ordenError } = await supabase
+        .from("ordenes")
+        .update({
+          estado,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      if (ordenError) throw ordenError
+
+      // Si hay observación, agregarla
+      if (observacion) {
+        const { error: observacionError } = await supabase.from("orden_observaciones").insert({
+          orden_id: id,
+          texto: `Cambio de estado a "${estado}": ${observacion}`,
+        })
+
+        if (observacionError) throw observacionError
+      }
+
+      return { success: true }
+    } catch (error: any) {
+      console.error(`Error al actualizar estado de orden con ID ${id}:`, error)
+      return { success: false, error: error.message || "Error al actualizar el estado de la orden" }
+    }
   },
 
-  updateOrdenEstado: async (id: string, estado: string, observacion?: string) => {
-    return OrdenService.actualizarEstadoOrden(id, estado, observacion)
+  // Agregar una observación a una orden
+  async agregarObservacion(
+    observacion: OrdenObservacionInput,
+  ): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      const supabase = createClient()
+
+      const { data, error } = await supabase.from("orden_observaciones").insert(observacion).select("id").single()
+
+      if (error) throw error
+
+      return { success: true, id: data.id }
+    } catch (error: any) {
+      console.error("Error al agregar observación:", error)
+      return { success: false, error: error.message || "Error al agregar la observación" }
+    }
   },
 
-  deleteOrden: async (id: string) => {
-    return OrdenService.eliminarOrden(id)
+  /**
+   * Cuenta las órdenes por estado
+   * @param status Estado de las órdenes a contar
+   * @returns Número de órdenes con el estado especificado
+   */
+  async countOrdersByStatus(status: string): Promise<number> {
+    try {
+      const supabase = createClient()
+      const { count, error } = await supabase
+        .from("ordenes")
+        .select("*", { count: "exact", head: true })
+        .eq("estado", status)
+
+      if (error) {
+        console.error("Error al contar órdenes por estado:", error)
+        return 0
+      }
+
+      return count || 0
+    } catch (error) {
+      console.error("Error al contar órdenes por estado:", error)
+      return 0
+    }
   },
 }
 
-// Re-exportar tipos para conveniencia
-export type { Orden, OrdenInput, OrdenDetalleInput, OrdenObservacionInput }
+// Actualizar una orden (versión cliente)
+export async function actualizarOrden(
+  id: string,
+  datos: Partial<OrdenInput>,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+
+    const { error } = await supabase
+      .from("ordenes")
+      .update({ ...datos, updated_at: new Date().toISOString() })
+      .eq("id", id)
+
+    if (error) throw error
+
+    return { success: true }
+  } catch (error: any) {
+    console.error(`Error al actualizar orden con ID ${id}:`, error)
+    return { success: false, error: error.message || "Error al actualizar la orden" }
+  }
+}
+
+// Eliminar una orden (versión cliente)
+export async function eliminarOrden(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+
+    // Eliminar la orden (las restricciones de clave foránea eliminarán automáticamente los detalles y observaciones)
+    const { error } = await supabase.from("ordenes").delete().eq("id", id)
+
+    if (error) throw error
+
+    return { success: true }
+  } catch (error: any) {
+    console.error(`Error al eliminar orden con ID ${id}:`, error)
+    return { success: false, error: error.message || "Error al eliminar la orden" }
+  }
+}
+

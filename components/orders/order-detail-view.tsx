@@ -313,3 +313,4 @@ export function OrderDetailView({ orden }: { orden: Orden }) {
     </div>
   )
 }
+
