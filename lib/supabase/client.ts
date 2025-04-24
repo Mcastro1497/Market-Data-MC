@@ -1,9 +1,12 @@
 "use client"
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { Database } from "@/lib/supabase/database.types"
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import type { Database } from "./database.types"
 
-// Cliente para componentes del lado del cliente
+// Crear un cliente de Supabase para el navegador
 export const createClient = () => {
-  return createClientComponentClient<Database>()
+  return createSupabaseClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
 }

@@ -2,7 +2,8 @@ import { notFound } from "next/navigation"
 import { OrdenDetalleView } from "@/components/ordenes/orden-detalle-view"
 import { Suspense } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
-import { obtenerOrdenPorId } from "@/lib/services/orden-supabase-service"
+import { createServiceClient } from "@/lib/supabase/server"
+import type { Orden } from "@/lib/types/orden-types"
 
 interface OrdenPageProps {
   params: {
@@ -35,12 +36,23 @@ function OrdenDetailSkeleton() {
 
 // Componente wrapper para cargar los datos de la orden
 async function OrdenDetailWrapper({ id }: { id: string }) {
-  // Obtener la orden desde Supabase usando la función del servidor
-  const orden = await obtenerOrdenPorId(id)
+  // Obtener la orden desde Supabase
+  const supabase = createServiceClient()
 
-  if (!orden) {
+  const { data, error } = await supabase
+    .from("ordenes")
+    .select(`
+      *,
+      detalles:orden_detalles(*),
+      observaciones:orden_observaciones(*)
+    `)
+    .eq("id", id)
+    .single()
+
+  if (error || !data) {
+    console.error(`Error al obtener orden ${id}:`, error)
     notFound()
   }
 
-  return <OrdenDetalleView orden={orden} />
+  return <OrdenDetalleView orden={data as Orden} />
 }
